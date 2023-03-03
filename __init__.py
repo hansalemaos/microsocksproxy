@@ -12,7 +12,8 @@ from ansi.colour import fx
 import kthread
 import psutil
 import sys
-
+from threading import Lock
+lock=Lock()
 from kthread_sleep import sleep
 
 nested_dict = lambda: defaultdict(nested_dict)
@@ -131,6 +132,8 @@ def create_proxies(
     silent=False,
     loglimit=10,
     colored=True,
+
+pidfile=None
 ):
 
     wholecommandline = f'"{minisockspath}" {auth_once} -i {listenip} -p {port}'
@@ -176,6 +179,16 @@ def create_proxies(
         co = None
         proxies.overview[x]["color"] = None
 
+    if pidfile:
+        try:
+            lock.acquire()
+            with open(pidfile,mode='a',encoding='utf-8') as f:
+                f.write(f'{auth_once},{listenip},{port},{user},{password},{bindaddr},{silent},{loglimit},{colored},')
+                f.write(str(proxies.overview[x]["pid"]))
+                f.write('\n')
+        finally:
+            lock.release()
+
     proxies.overview[x]["p_log"] = deque(
         (
             x
@@ -194,7 +207,7 @@ def create_proxies(
     )
 
 
-def start_proxies(allproxies):
+def start_proxies(allproxies,pidfile=None):
     for pro in allproxies:
         try:
             maxdi = max(list(proxies.overview.keys()))
@@ -205,7 +218,7 @@ def start_proxies(allproxies):
         proxies.overview[x]["thread"] = kthread.KThread(
             target=create_proxies,
             name=str(time.perf_counter()) + str(random.randrange(1, 100000000000)),
-            args=(x, *pro),
+            args=(x, *pro,pidfile),
         )
 
         proxies.overview[x]["thread"].start()
@@ -224,8 +237,9 @@ def start_proxies_from_csv(path):
         spamreader = csv.reader(csvfile, delimiter=",")
         for row in spamreader:
             allfi.append([convi(q.strip()) for q in row])
-
-    start_proxies(allproxies=allfi[1:])
+    pidfile = '\\'.join(path.split('\\')[:-1]) + '\\_withpid_' + path.split('\\')[-1]
+    print(pidfile)
+    start_proxies(allproxies=allfi[1:],pidfile=pidfile)
 
 
 if __name__ == "__main__":
@@ -240,7 +254,7 @@ auth_once,listenip,port,user,password,bindaddr,silent,loglimit,colored
 -1,       0.0.0.0, 1080,baba,bubu,    None,     False, 10,     True
 -1,       0.0.0.0, 1081,babi,bubu,    None,     True,  10,     False
 
-or import it
+#or import it
 start_proxies(
     allproxies=[
         (-1, "0.0.0.0", 1080, "baba", "bubu", None, False, 10, True),
